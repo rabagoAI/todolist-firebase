@@ -19,6 +19,7 @@ import {
   doc,
   Timestamp,
 } from 'firebase/firestore';
+import { Menu, X } from 'lucide-react';
 import './index.css';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
   const [searchValue, setSearchValue] = useState('');
   const [selectedTodoId, setSelectedTodoId] = useState(null);
   const [dbLoading, setDbLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Cargar tareas desde Firebase
   useEffect(() => {
@@ -104,6 +106,23 @@ function App() {
     if (!user) return;
 
     try {
+      let listId = activeList;
+      
+      if (activeList === 'importante') {
+        listId = 'tareas';
+        details.important = true;
+      } else if (activeList === 'mi-dia') {
+        listId = 'tareas';
+        const today = new Date();
+        details.dueDate = today.toISOString().split('T')[0];
+      } else if (activeList === 'planeado') {
+        listId = 'tareas';
+        if (!details.dueDate) {
+          const today = new Date();
+          details.dueDate = today.toISOString().split('T')[0];
+        }
+      }
+
       await addDoc(collection(db, 'todos'), {
         userId: user.uid,
         text,
@@ -111,7 +130,7 @@ function App() {
         important: details.important || false,
         dueDate: details.dueDate || null,
         notes: details.notes || null,
-        listId: activeList,
+        listId: listId,
         createdAt: Timestamp.now(),
       });
     } catch (err) {
@@ -189,7 +208,6 @@ function App() {
   // Obtener tareas filtradas
   const getFilteredTodos = () => {
     let filtered = todos.filter((todo) => {
-      // Filtro por búsqueda
       if (
         searchValue &&
         !todo.text.toLowerCase().includes(searchValue.toLowerCase())
@@ -197,7 +215,6 @@ function App() {
         return false;
       }
 
-      // Filtro por lista activa
       if (activeList === 'tareas') {
         return todo.listId === activeList || todo.listId === 'tareas';
       }
@@ -262,99 +279,149 @@ function App() {
   const selectedTodo = todos.find((t) => t.id === selectedTodoId);
 
   return (
-    <div className={`${darkMode ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen transition-colors`}>
-      <div className="flex h-screen">
-        {/* Sidebar */}
+    <div className={`${darkMode ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen transition-colors flex flex-col md:flex-row`}>
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:translate-x-0 fixed md:relative w-64 h-screen z-40 transition-transform duration-300`}
+      >
         <Sidebar
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           activeList={activeList}
-          setActiveList={setActiveList}
+          setActiveList={(list) => {
+            setActiveList(list);
+            setSidebarOpen(false); // Cerrar sidebar en móvil después de seleccionar
+          }}
           lists={lists}
           onCreateList={createList}
         />
+      </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <Header
-            darkMode={darkMode}
-            searchValue={searchValue}
-            setSearchValue={setSearchValue}
-          />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden w-full">
+        {/* Header */}
+        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b shadow-sm sticky top-0 z-20`}>
+          <div className="flex items-center gap-3 px-4 py-3 md:px-6 md:py-4">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className={`md:hidden p-2 rounded transition-colors ${
+                darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+            >
+              {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
 
-          {/* Tabs View */}
-          <TabsView
-            darkMode={darkMode}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            activeListName={getActiveListName()}
-          />
-
-          {/* Main Area */}
-          <main className="flex-1 overflow-y-auto">
-            <div className="max-w-5xl mx-auto px-6 py-8">
-              {/* Todo Form */}
-              <TodoFormMejorado
-                onAddTodo={addTodo}
+            {/* Header Component */}
+            <div className="flex-1">
+              <Header
                 darkMode={darkMode}
+                searchValue={searchValue}
+                setSearchValue={setSearchValue}
               />
+            </div>
+          </div>
+        </div>
 
-              {/* Content Area with List and Details */}
-              <div className="flex gap-6">
-                {/* List */}
-                <div className="flex-1">
-                  <TodoListMejorado
-                    todos={filteredTodos}
-                    onDeleteTodo={deleteTodo}
-                    onToggleTodo={toggleTodo}
-                    onToggleImportant={toggleImportant}
-                    onEditDetails={setSelectedTodoId}
+        {/* Tabs View */}
+        <TabsView
+          darkMode={darkMode}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          activeListName={getActiveListName()}
+        />
+
+        {/* Main Area */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+            {/* Todo Form */}
+            <TodoFormMejorado
+              onAddTodo={addTodo}
+              darkMode={darkMode}
+            />
+
+            {/* Content Area with List and Details */}
+            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+              {/* List */}
+              <div className="flex-1 min-w-0">
+                <TodoListMejorado
+                  todos={filteredTodos}
+                  onDeleteTodo={deleteTodo}
+                  onToggleTodo={toggleTodo}
+                  onToggleImportant={toggleImportant}
+                  onEditDetails={setSelectedTodoId}
+                  darkMode={darkMode}
+                />
+              </div>
+
+              {/* Details Panel - Hidden on mobile and tablet, visible on desktop */}
+              {selectedTodo && (
+                <div className="hidden xl:block w-80 flex-shrink-0">
+                  <TodoDetails
+                    todo={selectedTodo}
+                    onClose={() => setSelectedTodoId(null)}
+                    onUpdate={updateTodoDetails}
                     darkMode={darkMode}
                   />
                 </div>
-
-                {/* Details Panel */}
-                {selectedTodo && (
-                  <div className="hidden lg:block w-80">
-                    <TodoDetails
-                      todo={selectedTodo}
-                      onClose={() => setSelectedTodoId(null)}
-                      onUpdate={updateTodoDetails}
-                      darkMode={darkMode}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Clear Completed */}
-              {filteredTodos.some((t) => t.completed) && (
-                <div className="mt-6 text-center">
-                  <button
-                    onClick={async () => {
-                      const completedIds = filteredTodos
-                        .filter((t) => t.completed)
-                        .map((t) => t.id);
-
-                      for (const id of completedIds) {
-                        await deleteTodo(id);
-                      }
-                    }}
-                    className={`text-sm font-medium transition-colors ${
-                      darkMode
-                        ? 'text-gray-400 hover:text-red-400'
-                        : 'text-gray-500 hover:text-red-600'
-                    }`}
-                  >
-                    Limpiar completadas (
-                    {filteredTodos.filter((t) => t.completed).length})
-                  </button>
-                </div>
               )}
             </div>
-          </main>
-        </div>
+
+            {/* Clear Completed */}
+            {filteredTodos.some((t) => t.completed) && (
+              <div className="mt-6 text-center">
+                <button
+                  onClick={async () => {
+                    const completedIds = filteredTodos
+                      .filter((t) => t.completed)
+                      .map((t) => t.id);
+
+                    for (const id of completedIds) {
+                      await deleteTodo(id);
+                    }
+                  }}
+                  className={`text-sm font-medium transition-colors ${
+                    darkMode
+                      ? 'text-gray-400 hover:text-red-400'
+                      : 'text-gray-500 hover:text-red-600'
+                  }`}
+                >
+                  Limpiar completadas (
+                  {filteredTodos.filter((t) => t.completed).length})
+                </button>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
+
+      {/* Mobile Details Panel - Modal */}
+      {selectedTodo && (
+        <div className="xl:hidden fixed bottom-0 left-0 right-0 z-50">
+          <div
+            className={`${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} border-t rounded-t-2xl max-h-96 overflow-y-auto`}
+          >
+            <div className="p-4">
+              <TodoDetails
+                todo={selectedTodo}
+                onClose={() => setSelectedTodoId(null)}
+                onUpdate={updateTodoDetails}
+                darkMode={darkMode}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
